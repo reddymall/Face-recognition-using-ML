@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Face Recognition System</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f3f4f6;
+      color: #333;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+    }
+
+    h1 {
+      font-size: 2.5rem;
+      color: #2563eb;
+      margin-bottom: 1.5rem;
+    }
+
+    .container {
+      background: white;
+      padding: 2rem;
+      border-radius: 10px;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      max-width: 500px;
+      text-align: center;
+    }
+
+    .btn {
+      background-color: #2563eb;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      font-size: 1rem;
+      border-radius: 5px;
+      cursor: pointer;
+      margin: 10px 0;
+      transition: background-color 0.3s ease;
+    }
+
+    .btn:hover {
+      background-color: #a40c0c;
+    }
+
+    .btn:active {
+      background-color: #ac0c19;
+    }
+
+    .btn:disabled {
+      background-color: #9ca3af;
+      cursor: not-allowed;
+    }
+
+    .info {
+      font-size: 0.9rem;
+      color: #6b7280;
+      margin-top: 1rem;
+    }
+
+    .hidden {
+      display: none;
+    }
+
+    video {
+      width: 100%;
+      max-width: 400px;
+      margin-bottom: 1rem;
+      border: 1px solid #ccc;
+      border-radius: 10px;
+    }
+
+    input {
+      width: 100%;
+      padding: 10px;
+      margin-bottom: 1rem;
+      border: 1px solid #ddd;
+      border-radius: 5px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Face Recognition System</h1>
+    <video id="camera" autoplay class="hidden"></video>
+    <input type="text" id="personName" placeholder="Enter Name" class="hidden">
+    <input type="text" id="personId" placeholder="Enter ID" class="hidden">
+    <button id="captureBtn" class="btn hidden" onclick="captureAndTrain()">Capture & Train</button>
+    <button class="btn" onclick="startRecognition()">Start Recognition</button>
+    <button class="btn" onclick="stopRecognition()">Stop Recognition</button>
+    <button class="btn" onclick="showCamera()">Train Unknown Person</button>
+    <button class="btn" onclick="viewLogs()">View Logs</button>
+    <p class="info">Make sure the backend server is running at <strong>http://127.0.0.1:5000</strong>.</p>
+  </div>
+
+  <script>
+    const BACKEND_URL = "http://127.0.0.1:5000";
+    let cameraStream = null;
+
+    function showCamera() {
+      const video = document.getElementById('camera');
+      const personName = document.getElementById('personName');
+      const personId = document.getElementById('personId');
+      const captureBtn = document.getElementById('captureBtn');
+
+      video.classList.remove('hidden');
+      personName.classList.remove('hidden');
+      personId.classList.remove('hidden');
+      captureBtn.classList.remove('hidden');
+
+      navigator.mediaDevices
+        .getUserMedia({ video: true })
+        .then((stream) => {
+          cameraStream = stream;
+          video.srcObject = stream;
+        })
+        .catch((error) => {
+          alert("Error accessing the camera: " + error.message);
+          console.error("Camera error:", error);
+        });
+    }
+
+    async function captureAndTrain() {
+      const video = document.getElementById('camera');
+      const canvas = document.createElement('canvas');
+      const context = canvas.getContext('2d');
+      const personName = document.getElementById('personName').value.trim();
+      const personId = document.getElementById('personId').value.trim();
+
+      if (!personName || !personId) {
+        alert("Please enter a valid name and ID.");
+        return;
+      }
+
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+      const imageData = canvas.toDataURL('image/jpeg');
+
+      try {
+        const response = await fetch(`${BACKEND_URL}/train`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ name: personName, id: personId, image: imageData }),
+        });
+
+        const data = await response.json();
+        alert(data.message);
+      } catch (error) {
+        alert("Training error: " + error.message);
+        console.error("Training error:", error);
+      }
+
+      stopCamera();
+    }
+
+    function stopCamera() {
+      const video = document.getElementById('camera');
+      const personName = document.getElementById('personName');
+      const personId = document.getElementById('personId');
+      const captureBtn = document.getElementById('captureBtn');
+
+      video.classList.add('hidden');
+      personName.classList.add('hidden');
+      personId.classList.add('hidden');
+      captureBtn.classList.add('hidden');
+
+      if (cameraStream) {
+        cameraStream.getTracks().forEach((track) => track.stop());
+        cameraStream = null;
+      }
+    }
+
+    async function startRecognition() {
+      try {
+        const response = await fetch(`${BACKEND_URL}/start`, { method: "POST" });
+        const data = await response.json();
+        alert(data.message);
+      } catch (error) {
+        alert("Error starting recognition: " + error.message);
+        console.error("Start recognition error:", error);
+      }
+    }
+
+    async function stopRecognition() {
+      try {
+        const response = await fetch(`${BACKEND_URL}/stop`, { method: "POST" });
+        const data = await response.json();
+        alert(data.message);
+      } catch (error) {
+        alert("Error stopping recognition: " + error.message);
+        console.error("Stop recognition error:", error);
+      }
+    }
+
+    function viewLogs() {
+      fetch(`${BACKEND_URL}/logs/download`)
+        .then(response => {
+            if (!response.ok) {
+                throw new Error("Log file not found.");
+            }
+            return response.blob();
+        })
+        .then(blob => {
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = "face_logs.xlsx"; // Ensure correct file extension
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        })
+        .catch(error => {
+            alert("Error downloading logs: " + error.message);
+            console.error("Log download error:", error);
+        });
+    }
+  </script>
+</body>
+</html>
